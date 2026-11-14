@@ -1,0 +1,13 @@
+<USER_REQUEST>
+this is the md file, i want you to study uut very very properly and create me the local hosted files that work. i want you to make the ui very good i will share some inspo photos. and i want you to make the project that will be a data structures project. make no mistakes. i have attched the screenshot. do not completely copy the prioject just the design of ui. call this prakash ds. make it. 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-07T19:26:33+05:30.
+
+The user has uploaded 1 image(s):
+- C:/Users/Soham/.gemini/antigravity/brain/3113992b-6d9f-45f6-81c1-b9d2eb86eb72/.user_uploaded/media_1794059762179.jpg
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
