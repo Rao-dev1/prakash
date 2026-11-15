@@ -1,4 +1,7 @@
 @echo off
+setlocal
+cd /d "%~dp0"
+
 echo ========================================================
 echo          Building PRAKASH-DS C++ Core Engine
 echo ========================================================

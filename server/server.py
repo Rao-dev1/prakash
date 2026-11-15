@@ -12,6 +12,8 @@ import json
 import os
 import sys
 import time
+import webbrowser
+import threading
 
 PORT = 8000
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -23,8 +25,8 @@ EXE_PATH = os.path.join(BASE_DIR, "prakash_ds.exe")
 
 # System state
 state = {
-    "current_dataset": os.path.join(DATA_DIR, "dataset.csv"),
-    "dataset_name": "dataset.csv",
+    "current_dataset": os.path.join(DATA_DIR, "prdt1.csv"),
+    "dataset_name": "prdt1.csv",
     "leakage_limit": 25.0,
     "iddq_limit": 7.0,
     "z_threshold": 3.0,
@@ -32,8 +34,70 @@ state = {
     "last_run_time": None
 }
 
+def normalize_csv_file(fpath):
+    """If CSV is in tall format (timepoint_h, leakage_ua, iddq_ua), pivots it to wide format."""
+    try:
+        if not os.path.exists(fpath):
+            return
+        with open(fpath, "r", encoding="utf-8-sig", errors="replace") as f:
+            lines = [line.strip() for line in f if line.strip()]
+        if not lines:
+            return
+        header = [h.strip().lower() for h in lines[0].split(",")]
+        # Check if already wide format (has leakage and 0 / 24)
+        has_l0 = any("leakage" in h and ("0" in h or "t0" in h) for h in header)
+        has_l24 = any("leakage" in h and ("24" in h or "t24" in h) for h in header)
+        if has_l0 and has_l24:
+            return  # Already wide format
+
+        # Check if tall format with timepoint
+        time_col = None
+        leak_col = None
+        iddq_col = None
+        id_col = None
+        lot_col = None
+        for i, h in enumerate(header):
+            if "component" in h or h == "id": id_col = i
+            elif "lot" in h: lot_col = i
+            elif "time" in h: time_col = i
+            elif "leakage" in h: leak_col = i
+            elif "iddq" in h: iddq_col = i
+
+        if time_col is not None and leak_col is not None and iddq_col is not None:
+            records = {} # comp_id -> {lot, l0, l24, i0, i24}
+            for line in lines[1:]:
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) <= max(filter(lambda x: x is not None, [id_col, lot_col, time_col, leak_col, iddq_col])):
+                    continue
+                cid = parts[id_col] if id_col is not None else "UNKNOWN"
+                lot = parts[lot_col] if lot_col is not None else "LOT-DEFAULT"
+                try:
+                    t = float(parts[time_col])
+                    l_val = float(parts[leak_col])
+                    i_val = float(parts[iddq_col])
+                except ValueError:
+                    continue
+                if cid not in records:
+                    records[cid] = {"lot": lot, "l0": 0.0, "l24": 0.0, "i0": 0.0, "i24": 0.0}
+                if t == 0:
+                    records[cid]["l0"] = l_val
+                    records[cid]["i0"] = i_val
+                elif t == 24:
+                    records[cid]["l24"] = l_val
+                    records[cid]["i24"] = i_val
+
+            if records:
+                with open(fpath, "w", encoding="utf-8") as f:
+                    f.write("component_id,lot_id,leakage_0h,leakage_24h,iddq_0h,iddq_24h\n")
+                    for cid, d in records.items():
+                        f.write(f"{cid},{d['lot']},{d['l0']},{d['l24']},{d['i0']},{d['i24']}\n")
+                print(f"[Server] Normalized tall CSV to wide format: {len(records)} components")
+    except Exception as e:
+        print(f"[Server] CSV normalization warning: {e}")
+
 def run_cpp_engine(csv_path, leak_limit=25.0, iddq_limit=7.0, z_thresh=3.0):
     """Executes prakash_ds.exe in headless JSON mode and caches the results."""
+    normalize_csv_file(csv_path)
     cmd = [
         EXE_PATH,
         "--json",
@@ -332,24 +396,36 @@ class PrakashRequestHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_json_response({"error": "Endpoint not found"}, 404)
 
-def run_server(port=PORT):
+def run_server(port=PORT, auto_open_browser=True):
     ensure_initial_results()
     server_address = ("", port)
+    socketserver.TCPServer.allow_reuse_address = True
     try:
         httpd = socketserver.TCPServer(server_address, PrakashRequestHandler)
+        url = f"http://localhost:{port}/"
         print(f"\n=======================================================")
         print(f"      PRAKASH-DS Web Dashboard Server is Live!        ")
         print(f"=======================================================")
-        print(f"  URL: http://localhost:{port}/")
+        print(f"  URL: {url}")
         print(f"  Serving Static Assets: {PUBLIC_DIR}")
         print(f"  C++ Engine: {EXE_PATH}")
         print(f"  Current Dataset: {state['dataset_name']}")
         print(f"=======================================================\n")
+
+        if auto_open_browser and "--no-browser" not in sys.argv:
+            def _open():
+                time.sleep(0.6)
+                try:
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+            threading.Thread(target=_open, daemon=True).start()
+
         httpd.serve_forever()
     except OSError as e:
-        if e.errno == 10048: # Address already in use on Windows
+        if e.errno == 10048 or "10048" in str(e) or "Address already in use" in str(e):
             print(f"[Warning] Port {port} in use, trying {port+1}...")
-            run_server(port + 1)
+            run_server(port + 1, auto_open_browser)
         else:
             raise e
 

@@ -204,6 +204,8 @@
       });
       const data = await res.json();
       if (data.success) {
+        state.activeLotID = null;
+        state.activeComponentID = null;
         state.dataset = data.results;
         onDatasetLoaded(data.results);
         showToast(`Loaded ${sampleName} successfully!`, 'success');
@@ -229,6 +231,8 @@
         });
         const data = await res.json();
         if (data.success) {
+          state.activeLotID = null;
+          state.activeComponentID = null;
           state.dataset = data.results;
           onDatasetLoaded(data.results);
           showToast(`Screening complete for ${file.name}!`, 'success');
@@ -317,9 +321,10 @@
       elements.lotSelector.appendChild(opt);
     });
 
-    // Select first lot or retain
-    if (!state.activeLotID || state.activeLotID === 'ALL') {
-      state.activeLotID = lots.length > 0 ? lots[0].lotID : 'ALL';
+    // Validate activeLotID exists in the newly loaded dataset
+    const lotExists = (state.activeLotID === 'ALL') || lots.some(l => l.lotID === state.activeLotID);
+    if (!lotExists || !state.activeLotID) {
+      state.activeLotID = (lots.length > 0) ? lots[0].lotID : 'ALL';
     }
     elements.lotSelector.value = state.activeLotID;
 
@@ -333,12 +338,15 @@
     updateLotView();
     updateValidationTab(ds);
 
-    // Default select first top-risk component or first suspect
-    if (!state.activeComponentID && ds.components && ds.components.length > 0) {
-      const highRisk = ds.topRiskComponents && ds.topRiskComponents.length > 0
+    // Validate activeComponentID or select top-risk component
+    const compExists = ds.components && ds.components.some(c => c.id === state.activeComponentID);
+    if (!compExists || !state.activeComponentID) {
+      const highRisk = (ds.topRiskComponents && ds.topRiskComponents.length > 0)
         ? ds.topRiskComponents[0].componentID
-        : ds.components[0].id;
-      selectComponent(highRisk);
+        : (ds.components && ds.components.length > 0 ? ds.components[0].id : null);
+      if (highRisk) {
+        selectComponent(highRisk);
+      }
     }
   }
 
@@ -1129,6 +1137,7 @@
   elements.fileInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
       uploadFile(e.target.files[0]);
+      e.target.value = ''; // Reset so uploading the same file again triggers change event
     }
   });
 
@@ -1144,8 +1153,9 @@
     alert(
       "CSV Schema Format (6 Columns):\n\n" +
       "component_id,lot_id,leakage_0h,leakage_24h,iddq_0h,iddq_24h\n" +
-      "LOT-DEMO-A-C0001,LOT-DEMO-A,8.52,9.29,2.39,2.59\n" +
-      "LOT-DEMO-A-C0002,LOT-DEMO-A,8.60,9.35,2.41,2.62\n\n" +
+      "LOT-RANDOM-01-MON-1368,LOT-RANDOM-01,8.1,8.6,2.4,2.45\n" +
+      "LOT-RANDOM-01-PASS-0479,LOT-RANDOM-01,8.5,8.62,2.35,2.41\n" +
+      "LOT-RANDOM-01-SUS-1700,LOT-RANDOM-01,12.5,16.0,3.5,4.8\n\n" +
       "• leakage_0h & leakage_24h: Leakage Current (µA)\n" +
       "• iddq_0h & iddq_24h: IDDQ Current (µA)"
     );
